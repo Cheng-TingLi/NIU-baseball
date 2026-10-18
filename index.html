@@ -122,6 +122,19 @@
   .btn-success:hover { opacity: 0.9; }
   .btn-danger { background: var(--danger); color: white; padding: 0.3rem 0.6rem; font-size: 0.8rem; }
   .btn-danger:hover { opacity: 0.9; }
+  .btn-edit { background: #dd6b20; color: white; padding: 0.3rem 0.6rem; font-size: 0.8rem; margin-right: 0.25rem; }
+  .btn-edit:hover { opacity: 0.9; }
+  .editing-banner {
+    background: #fefcbf;
+    border: 1px solid #ecc94b;
+    color: #744210;
+    padding: 0.4rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    display: none;
+  }
   .btn-outline {
     background: white;
     border: 1px solid var(--border);
@@ -287,6 +300,7 @@
   <div id="batting" class="panel">
     <div class="card">
       <h2>🏏 打擊數據輸入</h2>
+      <div class="editing-banner" id="batEditBanner">正在修改一筆打擊紀錄，改完請按「儲存修改」</div>
       <div class="form-row" id="batForm">
         <div class="form-group"><label>日期</label><input type="date" id="batDate"></div>
         <div class="form-group"><label>選手</label><select id="batPlayer"></select></div>
@@ -302,9 +316,10 @@
         <div class="form-group"><label>打點 RBI</label><input type="number" id="batRBI" min="0" value="0"></div>
         <div class="form-group"><label>盜壘 SB</label><input type="number" id="batSB" min="0" value="0"></div>
         <div class="form-group"><label>三振 SO</label><input type="number" id="batSO" min="0" value="0"></div>
-        <button class="btn btn-success" onclick="addBatting()">新增此筆</button>
+        <button class="btn btn-success" id="batSubmitBtn" onclick="addBatting()">新增此筆</button>
+        <button class="btn btn-outline" id="batCancelBtn" onclick="cancelEditBatting()" style="display:none">取消修改</button>
       </div>
-      <div class="hint">每場每位打者新增一筆。修改後會即時反映在「打擊總結」。</div>
+      <div class="hint" id="batHint">每場每位打者新增一筆。輸入錯誤可按「改」載入後修改再儲存。</div>
     </div>
     <div class="card">
       <div class="toolbar">
@@ -330,6 +345,7 @@
   <div id="pitching" class="panel">
     <div class="card">
       <h2>🎯 投手數據輸入</h2>
+      <div class="editing-banner" id="pitEditBanner">正在修改一筆投手紀錄，改完請按「儲存修改」</div>
       <div class="form-row">
         <div class="form-group"><label>日期</label><input type="date" id="pitDate"></div>
         <div class="form-group"><label>選手</label><select id="pitPlayer"></select></div>
@@ -346,9 +362,10 @@
         <div class="form-group"><label>最高球速</label><input type="number" id="pitMaxVelo" min="0" step="0.1" value="" placeholder="km/h" title="當天最高球速（公里）"></div>
         <div class="form-group"><label>平均球速</label><input type="number" id="pitAvgVelo" min="0" step="0.1" value="" placeholder="km/h" title="當天平均球速（公里）"></div>
         <div class="form-group"><label>用球數</label><input type="number" id="pitPitches" min="0" value="" placeholder="球" title="當天總用球數"></div>
-        <button class="btn btn-success" onclick="addPitching()">新增此筆</button>
+        <button class="btn btn-success" id="pitSubmitBtn" onclick="addPitching()">新增此筆</button>
+        <button class="btn btn-outline" id="pitCancelBtn" onclick="cancelEditPitching()" style="display:none">取消修改</button>
       </div>
-      <div class="hint">局數請用小數：5.0 = 5局、5.1 = 5又1/3局、5.2 = 5又2/3局。球速單位為 km/h，可空白不填。</div>
+      <div class="hint" id="pitHint">局數：5.0=5局、5.1=5又1/3、5.2=5又2/3。球速可空白。輸入錯誤可按「改」修改。</div>
     </div>
     <div class="card">
       <div class="toolbar">
@@ -451,7 +468,7 @@
       <h2>📖 使用說明</h2>
       <ol style="padding-left:1.5rem;line-height:1.8">
         <li>到「選手名單」新增所有打者與投手姓名。</li>
-        <li>到「打擊輸入」或「投手輸入」，選擇日期與選手，填入該場數據後按「新增此筆」。</li>
+        <li>到「打擊輸入」或「投手輸入」，選擇日期與選手，填入該場數據後按「新增此筆」。輸入錯誤可按該筆的「改」載入後修改再「儲存修改」。</li>
         <li>「打擊總結」與「投手總結」會即時自動加總並計算進階數據。</li>
         <li>到「文字分享」可產生單一或全部選手的文字報告，可複製、或「存成文字檔（.txt）」給朋友，也可讀取之前的文字檔查看。</li>
         <li>資料會自動暫存在瀏覽器。選手名單頁的「存檔／讀檔」是備份完整數據用（JSON）；文字分享頁的存讀則是純文字報告。</li>
@@ -650,11 +667,24 @@ function importData(event) {
 }
 
 // ========== Batting ==========
+let editingBatId = null;
+
+function resetBatForm() {
+  ['batAB','batH','bat2B','bat3B','batHR','batBB','batHBP','batSF','batR','batRBI','batSB','batSO'].forEach(id => {
+    document.getElementById(id).value = 0;
+  });
+  document.getElementById('batDate').value = new Date().toISOString().slice(0,10);
+  editingBatId = null;
+  document.getElementById('batSubmitBtn').textContent = '新增此筆';
+  document.getElementById('batSubmitBtn').className = 'btn btn-success';
+  document.getElementById('batCancelBtn').style.display = 'none';
+  document.getElementById('batEditBanner').style.display = 'none';
+}
+
 function addBatting() {
   const player = document.getElementById('batPlayer').value;
   if (!player) { alert('請先選擇選手'); return; }
-  const rec = {
-    id: Date.now() + Math.random(),
+  const data = {
     date: document.getElementById('batDate').value || new Date().toISOString().slice(0,10),
     player,
     AB: +document.getElementById('batAB').value || 0,
@@ -670,16 +700,50 @@ function addBatting() {
     SB: +document.getElementById('batSB').value || 0,
     SO: +document.getElementById('batSO').value || 0
   };
-  batting.push(rec);
+  if (editingBatId != null) {
+    const idx = batting.findIndex(r => r.id === editingBatId);
+    if (idx >= 0) {
+      batting[idx] = { ...batting[idx], ...data };
+    }
+  } else {
+    batting.push({ id: Date.now() + Math.random(), ...data });
+  }
   save();
   renderBatTable();
-  // reset numbers
-  ['batAB','batH','bat2B','bat3B','batHR','batBB','batHBP','batSF','batR','batRBI','batSB','batSO'].forEach(id => {
-    document.getElementById(id).value = 0;
-  });
+  resetBatForm();
+}
+
+function editBatting(id) {
+  const r = batting.find(x => x.id === id);
+  if (!r) return;
+  editingBatId = id;
+  document.getElementById('batDate').value = r.date;
+  document.getElementById('batPlayer').value = r.player;
+  document.getElementById('batAB').value = r.AB;
+  document.getElementById('batH').value = r.H;
+  document.getElementById('bat2B').value = r['2B'];
+  document.getElementById('bat3B').value = r['3B'];
+  document.getElementById('batHR').value = r.HR;
+  document.getElementById('batBB').value = r.BB;
+  document.getElementById('batHBP').value = r.HBP;
+  document.getElementById('batSF').value = r.SF;
+  document.getElementById('batR').value = r.R;
+  document.getElementById('batRBI').value = r.RBI;
+  document.getElementById('batSB').value = r.SB;
+  document.getElementById('batSO').value = r.SO;
+  document.getElementById('batSubmitBtn').textContent = '儲存修改';
+  document.getElementById('batSubmitBtn').className = 'btn btn-primary';
+  document.getElementById('batCancelBtn').style.display = 'inline-block';
+  document.getElementById('batEditBanner').style.display = 'block';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function cancelEditBatting() {
+  resetBatForm();
 }
 
 function deleteBatting(id) {
+  if (editingBatId === id) resetBatForm();
   batting = batting.filter(r => r.id !== id);
   save();
   renderBatTable();
@@ -702,7 +766,10 @@ function renderBatTable() {
       <td>${r.AB}</td><td>${r.H}</td><td>${r['2B']}</td><td>${r['3B']}</td><td>${r.HR}</td>
       <td>${r.BB}</td><td>${r.HBP}</td><td>${r.SF}</td><td>${r.R}</td><td>${r.RBI}</td>
       <td>${r.SB}</td><td>${r.SO}</td>
-      <td><button class="btn btn-danger" onclick="deleteBatting(${r.id})">刪</button></td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-edit" onclick="editBatting(${r.id})">改</button>
+        <button class="btn btn-danger" onclick="deleteBatting(${r.id})">刪</button>
+      </td>
     </tr>
   `).join('');
 }
@@ -787,14 +854,30 @@ function convertIP(raw) {
   return intPart + (frac / 3);
 }
 
+let editingPitId = null;
+
+function resetPitForm() {
+  ['pitIP','pitH','pitR','pitER','pitBB','pitSO','pitHR','pitW','pitL','pitSV'].forEach(id => {
+    document.getElementById(id).value = 0;
+  });
+  document.getElementById('pitMaxVelo').value = '';
+  document.getElementById('pitAvgVelo').value = '';
+  document.getElementById('pitPitches').value = '';
+  document.getElementById('pitDate').value = new Date().toISOString().slice(0,10);
+  editingPitId = null;
+  document.getElementById('pitSubmitBtn').textContent = '新增此筆';
+  document.getElementById('pitSubmitBtn').className = 'btn btn-success';
+  document.getElementById('pitCancelBtn').style.display = 'none';
+  document.getElementById('pitEditBanner').style.display = 'none';
+}
+
 function addPitching() {
   const player = document.getElementById('pitPlayer').value;
   if (!player) { alert('請先選擇選手'); return; }
   const maxVeloVal = document.getElementById('pitMaxVelo').value;
   const avgVeloVal = document.getElementById('pitAvgVelo').value;
   const pitchesVal = document.getElementById('pitPitches').value;
-  const rec = {
-    id: Date.now() + Math.random(),
+  const data = {
     date: document.getElementById('pitDate').value || new Date().toISOString().slice(0,10),
     player,
     IP: +document.getElementById('pitIP').value || 0,
@@ -811,18 +894,51 @@ function addPitching() {
     avgVelo: avgVeloVal === '' ? null : +avgVeloVal,
     pitches: pitchesVal === '' ? null : +pitchesVal
   };
-  pitching.push(rec);
+  if (editingPitId != null) {
+    const idx = pitching.findIndex(r => r.id === editingPitId);
+    if (idx >= 0) {
+      pitching[idx] = { ...pitching[idx], ...data };
+    }
+  } else {
+    pitching.push({ id: Date.now() + Math.random(), ...data });
+  }
   save();
   renderPitTable();
-  ['pitIP','pitH','pitR','pitER','pitBB','pitSO','pitHR','pitW','pitL','pitSV'].forEach(id => {
-    document.getElementById(id).value = 0;
-  });
-  document.getElementById('pitMaxVelo').value = '';
-  document.getElementById('pitAvgVelo').value = '';
-  document.getElementById('pitPitches').value = '';
+  resetPitForm();
+}
+
+function editPitching(id) {
+  const r = pitching.find(x => x.id === id);
+  if (!r) return;
+  editingPitId = id;
+  document.getElementById('pitDate').value = r.date;
+  document.getElementById('pitPlayer').value = r.player;
+  document.getElementById('pitIP').value = r.IP;
+  document.getElementById('pitH').value = r.H;
+  document.getElementById('pitR').value = r.R;
+  document.getElementById('pitER').value = r.ER;
+  document.getElementById('pitBB').value = r.BB;
+  document.getElementById('pitSO').value = r.SO;
+  document.getElementById('pitHR').value = r.HR;
+  document.getElementById('pitW').value = r.W;
+  document.getElementById('pitL').value = r.L;
+  document.getElementById('pitSV').value = r.SV;
+  document.getElementById('pitMaxVelo').value = r.maxVelo != null ? r.maxVelo : '';
+  document.getElementById('pitAvgVelo').value = r.avgVelo != null ? r.avgVelo : '';
+  document.getElementById('pitPitches').value = r.pitches != null ? r.pitches : '';
+  document.getElementById('pitSubmitBtn').textContent = '儲存修改';
+  document.getElementById('pitSubmitBtn').className = 'btn btn-primary';
+  document.getElementById('pitCancelBtn').style.display = 'inline-block';
+  document.getElementById('pitEditBanner').style.display = 'block';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function cancelEditPitching() {
+  resetPitForm();
 }
 
 function deletePitching(id) {
+  if (editingPitId === id) resetPitForm();
   pitching = pitching.filter(r => r.id !== id);
   save();
   renderPitTable();
@@ -847,7 +963,10 @@ function renderPitTable() {
       <td>${r.maxVelo != null ? r.maxVelo : '-'}</td>
       <td>${r.avgVelo != null ? r.avgVelo : '-'}</td>
       <td>${r.pitches != null ? r.pitches : '-'}</td>
-      <td><button class="btn btn-danger" onclick="deletePitching(${r.id})">刪</button></td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-edit" onclick="editPitching(${r.id})">改</button>
+        <button class="btn btn-danger" onclick="deletePitching(${r.id})">刪</button>
+      </td>
     </tr>
   `).join('');
 }
