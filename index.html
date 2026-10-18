@@ -391,7 +391,11 @@
   <!-- 打擊總結 -->
   <div id="bat-summary" class="panel">
     <div class="card">
-      <h2>📊 打擊數據總結</h2>
+      <div class="toolbar">
+        <h2 style="margin:0">📊 打擊數據總結</h2>
+        <button class="btn btn-success" onclick="exportAllBatText()">💾 一次匯出全部打擊文字</button>
+        <button class="btn btn-primary" onclick="exportAllBatText(true)">📋 複製全部打擊文字</button>
+      </div>
       <div class="formula-box">
         BA = H ÷ AB &nbsp;|&nbsp; OBP = (H+BB+HBP) ÷ (AB+BB+HBP+SF) &nbsp;|&nbsp;
         SLG = 壘打數 ÷ AB &nbsp;|&nbsp; OPS = OBP + SLG<br>
@@ -416,7 +420,11 @@
   <!-- 投手總結 -->
   <div id="pit-summary" class="panel">
     <div class="card">
-      <h2>📈 投手數據總結</h2>
+      <div class="toolbar">
+        <h2 style="margin:0">📈 投手數據總結</h2>
+        <button class="btn btn-success" onclick="exportAllPitText()">💾 一次匯出全部投手文字</button>
+        <button class="btn btn-primary" onclick="exportAllPitText(true)">📋 複製全部投手文字</button>
+      </div>
       <div class="formula-box">
         ERA = (ER × 9) ÷ IP &nbsp;|&nbsp; WHIP = (BB + H) ÷ IP &nbsp;|&nbsp;
         K/9 = (SO × 9) ÷ IP &nbsp;|&nbsp; BB/9 = (BB × 9) ÷ IP<br>
@@ -470,7 +478,8 @@
         <li>到「選手名單」新增所有打者與投手姓名。</li>
         <li>到「打擊輸入」或「投手輸入」，選擇日期與選手，填入該場數據後按「新增此筆」。輸入錯誤可按該筆的「改」載入後修改再「儲存修改」。</li>
         <li>「打擊總結」與「投手總結」會即時自動加總並計算進階數據。</li>
-        <li>到「文字分享」可產生單一或全部選手的文字報告，可複製、或「存成文字檔（.txt）」給朋友，也可讀取之前的文字檔查看。</li>
+        <li>「打擊總結／投手總結」可按「一次匯出全部…文字」直接下載或複製全部選手報告給朋友。</li>
+        <li>「文字分享」也可產生單一或全部選手詳細報告（含各場明細），可存成 .txt。</li>
         <li>資料會自動暫存在瀏覽器。選手名單頁的「存檔／讀檔」是備份完整數據用（JSON）；文字分享頁的存讀則是純文字報告。</li>
         <li>可隨時刪除單筆紀錄或清除所有資料重新開始。</li>
       </ol>
@@ -1140,6 +1149,152 @@ function showShareButtons() {
   document.getElementById('saveTxtBtn').style.display = 'inline-block';
   document.getElementById('copyMsg').style.display = 'none';
   document.getElementById('saveTxtMsg').style.display = 'none';
+}
+
+function downloadTxtFile(text, filename) {
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function copyTextNow(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(text).then(() => true).catch(() => false);
+  }
+  return Promise.resolve(false);
+}
+
+function buildAllBatSummaryText() {
+  if (batting.length === 0) return null;
+  const map = {};
+  batting.forEach(r => {
+    if (!map[r.player]) {
+      map[r.player] = { games:0, AB:0, H:0, '2B':0, '3B':0, HR:0, BB:0, HBP:0, SF:0, R:0, RBI:0, SB:0, SO:0 };
+    }
+    const s = map[r.player];
+    s.games++;
+    s.AB += r.AB; s.H += r.H; s['2B'] += r['2B']; s['3B'] += r['3B']; s.HR += r.HR;
+    s.BB += r.BB; s.HBP += r.HBP; s.SF += r.SF; s.R += r.R; s.RBI += r.RBI; s.SB += r.SB; s.SO += r.SO;
+  });
+  const sorted = Object.entries(map).map(([name, s]) => {
+    const TB = s.H + s['2B'] + 2*s['3B'] + 3*s.HR;
+    const BA = s.AB ? s.H / s.AB : null;
+    const denom = s.AB + s.BB + s.HBP + s.SF;
+    const OBP = denom ? (s.H + s.BB + s.HBP) / denom : null;
+    const SLG = s.AB ? TB / s.AB : null;
+    const OPS = (OBP !== null && SLG !== null) ? OBP + SLG : null;
+    return { name, s, TB, BA, OBP, SLG, OPS };
+  }).sort((a,b) => (b.OPS || 0) - (a.OPS || 0));
+
+  const lines = [];
+  lines.push('【打擊數據總結】');
+  lines.push('═'.repeat(40));
+  lines.push('');
+  sorted.forEach(({ name, s, TB, BA, OBP, SLG, OPS }) => {
+    lines.push(name);
+    lines.push(`  場次 ${s.games}　AB ${s.AB}　H ${s.H}　2B ${s['2B']}　3B ${s['3B']}　HR ${s.HR}`);
+    lines.push(`  BB ${s.BB}　HBP ${s.HBP}　SF ${s.SF}　R ${s.R}　RBI ${s.RBI}　SB ${s.SB}　SO ${s.SO}`);
+    lines.push(`  壘打 ${TB}　BA ${fmt3(BA)}　OBP ${fmt3(OBP)}　SLG ${fmt3(SLG)}　OPS ${fmt3(OPS)}`);
+    lines.push('');
+    lines.push('─'.repeat(36));
+    lines.push('');
+  });
+  lines.push('由棒球統計軟體產生');
+  return lines.join('\n');
+}
+
+function buildAllPitSummaryText() {
+  if (pitching.length === 0) return null;
+  const map = {};
+  pitching.forEach(r => {
+    if (!map[r.player]) {
+      map[r.player] = {
+        games:0, rawIP:0, H:0, R:0, ER:0, BB:0, SO:0, HR:0, W:0, L:0, SV:0,
+        maxVelo: null, avgVeloSum: 0, avgVeloCount: 0, pitches: 0
+      };
+    }
+    const s = map[r.player];
+    s.games++;
+    s.rawIP += r.IP;
+    s.H += r.H; s.R += r.R; s.ER += r.ER; s.BB += r.BB; s.SO += r.SO;
+    s.HR += r.HR; s.W += r.W; s.L += r.L; s.SV += r.SV;
+    if (r.maxVelo != null) s.maxVelo = s.maxVelo == null ? r.maxVelo : Math.max(s.maxVelo, r.maxVelo);
+    if (r.avgVelo != null) { s.avgVeloSum += r.avgVelo; s.avgVeloCount++; }
+    if (r.pitches != null) s.pitches += r.pitches;
+  });
+  const sorted = Object.entries(map).map(([name, s]) => {
+    const IP = convertIP(s.rawIP);
+    const ERA = IP ? s.ER * 9 / IP : null;
+    const WHIP = IP ? (s.BB + s.H) / IP : null;
+    const K9 = IP ? s.SO * 9 / IP : null;
+    const BB9 = IP ? s.BB * 9 / IP : null;
+    const avgVelo = s.avgVeloCount ? s.avgVeloSum / s.avgVeloCount : null;
+    return { name, s, IP, ERA, WHIP, K9, BB9, avgVelo };
+  }).sort((a,b) => (a.ERA || 999) - (b.ERA || 999));
+
+  const lines = [];
+  lines.push('【投手數據總結】');
+  lines.push('═'.repeat(40));
+  lines.push('');
+  sorted.forEach(({ name, s, IP, ERA, WHIP, K9, BB9, avgVelo }) => {
+    lines.push(name);
+    lines.push(`  出賽 ${s.games}　IP ${fmt2(IP)}　H ${s.H}　R ${s.R}　ER ${s.ER}　BB ${s.BB}　SO ${s.SO}　HR ${s.HR}`);
+    lines.push(`  W ${s.W}　L ${s.L}　SV ${s.SV}　ERA ${fmt2(ERA)}　WHIP ${fmt2(WHIP)}　K/9 ${fmt2(K9)}　BB/9 ${fmt2(BB9)}`);
+    lines.push(`  最高球速 ${s.maxVelo != null ? s.maxVelo : '-'}　平均球速 ${avgVelo != null ? avgVelo.toFixed(1) : '-'}　總用球 ${s.pitches || '-'}`);
+    lines.push('');
+    lines.push('─'.repeat(36));
+    lines.push('');
+  });
+  lines.push('由棒球統計軟體產生');
+  return lines.join('\n');
+}
+
+function exportAllBatText(copyOnly) {
+  const text = buildAllBatSummaryText();
+  if (!text) { alert('尚無打擊數據'); return; }
+  const dateStr = new Date().toISOString().slice(0, 10);
+  if (copyOnly) {
+    copyTextNow(text).then(ok => {
+      if (ok) alert('已複製全部打擊文字到剪貼簿！');
+      else {
+        document.getElementById('shareOutput').value = text;
+        showShareButtons();
+        alert('已放到「文字分享」欄位，請手動複製。');
+      }
+    });
+  } else {
+    downloadTxtFile(text, `打擊總結_全部_${dateStr}.txt`);
+    document.getElementById('shareOutput').value = text;
+    showShareButtons();
+    alert('已下載全部打擊文字檔！');
+  }
+}
+
+function exportAllPitText(copyOnly) {
+  const text = buildAllPitSummaryText();
+  if (!text) { alert('尚無投手數據'); return; }
+  const dateStr = new Date().toISOString().slice(0, 10);
+  if (copyOnly) {
+    copyTextNow(text).then(ok => {
+      if (ok) alert('已複製全部投手文字到剪貼簿！');
+      else {
+        document.getElementById('shareOutput').value = text;
+        showShareButtons();
+        alert('已放到「文字分享」欄位，請手動複製。');
+      }
+    });
+  } else {
+    downloadTxtFile(text, `投手總結_全部_${dateStr}.txt`);
+    document.getElementById('shareOutput').value = text;
+    showShareButtons();
+    alert('已下載全部投手文字檔！');
+  }
 }
 
 function generateShareText() {
